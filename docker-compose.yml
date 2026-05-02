@@ -1,0 +1,5 @@
+services:
+  teleport-assessment:
+    build: .
+    ports:
+      - "8080:8080"
