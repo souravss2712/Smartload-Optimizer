@@ -104,6 +104,8 @@ Example response:
 
 The optimizer pre-groups orders by route and hazmat status, then runs bitmask dynamic programming for each compatible group. It enumerates subsets with bit operations, reuses totals from previous masks, prunes overweight or over-volume subsets early, verifies that selected orders share a feasible pickup/delivery window, and keeps the highest-payout valid result.
 
+Route values are normalized for compatibility checks by trimming whitespace, collapsing repeated whitespace, and comparing case-insensitively.
+
 Maximum supported orders per request: `22`. Requests above that limit return `413 Payload Too Large`.
 
 ## Test

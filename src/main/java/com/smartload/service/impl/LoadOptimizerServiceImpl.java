@@ -1,9 +1,9 @@
 package com.smartload.service.impl;
 
+import com.smartload.exception.TooManyOrdersException;
 import com.smartload.model.OptimizeRequest;
 import com.smartload.model.OptimizeResponse;
 import com.smartload.optimizer.LoadOptimizer;
-import com.smartload.exception.TooManyOrdersException;
 import com.smartload.service.LoadOptimizerService;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;

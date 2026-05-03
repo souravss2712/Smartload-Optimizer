@@ -1,11 +1,14 @@
 package com.smartload.optimizer;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertTimeout;
 
 import com.smartload.model.OptimizeResponse;
 import com.smartload.model.Order;
 import com.smartload.model.Truck;
+import java.time.Duration;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -75,6 +78,19 @@ class LoadOptimizerTest {
     }
 
     @Test
+    void normalizesRouteValuesForCompatibility() {
+        Truck truck = truck(44_000, 3_000);
+        List<Order> orders = List.of(
+                order("ord-001", 250_000, 10_000, 700, " Los   Angeles, CA ", "Dallas, TX", false),
+                order("ord-002", 260_000, 10_000, 700, "los angeles, ca", " dallas, tx ", false));
+
+        OptimizeResponse response = optimizer.optimize(truck, orders);
+
+        assertThat(response.getSelectedOrderIds()).containsExactly("ord-001", "ord-002");
+        assertThat(response.getTotalPayoutCents()).isEqualTo(510_000);
+    }
+
+    @Test
     void enforcesCommonTimeWindowCompatibility() {
         Truck truck = truck(44_000, 3_000);
         List<Order> orders = List.of(
@@ -118,6 +134,30 @@ class LoadOptimizerTest {
         assertThat(response.getTotalPayoutCents()).isZero();
         assertThat(response.getTotalWeightLbs()).isZero();
         assertThat(response.getTotalVolumeCuft()).isZero();
+    }
+
+    @Test
+    void optimizesTwentyTwoSameLaneOrdersWithinPerformanceBudget() {
+        Truck truck = truck(44_000, 3_000);
+        List<Order> orders = new ArrayList<>();
+        for (int index = 1; index <= 22; index++) {
+            orders.add(order(
+                    "ord-%03d".formatted(index),
+                    10_000 + index,
+                    1_000,
+                    100,
+                    "Los Angeles, CA",
+                    "Dallas, TX",
+                    false));
+        }
+
+        assertTimeout(Duration.ofSeconds(2), () -> {
+            OptimizeResponse response = optimizer.optimize(truck, orders);
+
+            assertThat(response.getSelectedOrderIds()).hasSize(22);
+            assertThat(response.getTotalWeightLbs()).isEqualTo(22_000);
+            assertThat(response.getTotalVolumeCuft()).isEqualTo(2_200);
+        });
     }
 
     private Truck truck(long maxWeightLbs, long maxVolumeCuft) {

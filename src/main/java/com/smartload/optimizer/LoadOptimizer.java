@@ -5,11 +5,10 @@ import com.smartload.model.Order;
 import com.smartload.model.Truck;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import org.springframework.stereotype.Component;
 
@@ -36,40 +35,60 @@ public class LoadOptimizer {
         Map<GroupKey, List<Order>> groups = new LinkedHashMap<>();
         for (Order order : orders) {
             GroupKey key = new GroupKey(
-                    order.getOrigin(),
-                    order.getDestination(),
+                    normalizeRouteValue(order.getOrigin()),
+                    normalizeRouteValue(order.getDestination()),
                     Boolean.TRUE.equals(order.getHazmat()));
             groups.computeIfAbsent(key, ignored -> new ArrayList<>()).add(order);
         }
         return groups;
     }
 
+    private String normalizeRouteValue(String value) {
+        return value.trim().replaceAll("\\s+", " ").toLowerCase(Locale.ROOT);
+    }
+
     private Result optimizeCompatibleGroup(Truck truck, List<Order> orders) {
         int size = orders.size();
         int subsetCount = 1 << size;
+        long[] orderWeights = new long[size];
+        long[] orderVolumes = new long[size];
+        long[] orderPayouts = new long[size];
+        long[] orderPickupDays = new long[size];
+        long[] orderDeliveryDays = new long[size];
+
+        for (int index = 0; index < size; index++) {
+            Order order = orders.get(index);
+            orderWeights[index] = order.getWeightLbs();
+            orderVolumes[index] = order.getVolumeCuft();
+            orderPayouts[index] = order.getPayoutCents();
+            orderPickupDays[index] = order.getPickupDate().toEpochDay();
+            orderDeliveryDays[index] = order.getDeliveryDate().toEpochDay();
+        }
 
         long[] weights = new long[subsetCount];
         long[] volumes = new long[subsetCount];
         long[] payouts = new long[subsetCount];
         long[] latestPickups = new long[subsetCount];
         long[] earliestDeliveries = new long[subsetCount];
-        Result best = Result.empty();
+        int bestMask = 0;
+        long bestPayout = 0;
+        long bestWeight = 0;
+        long bestVolume = 0;
 
         for (int mask = 1; mask < subsetCount; mask++) {
             int leastSignificantBit = mask & -mask;
             int orderIndex = Integer.numberOfTrailingZeros(leastSignificantBit);
             int previousMask = mask ^ leastSignificantBit;
-            Order order = orders.get(orderIndex);
 
-            long latestPickup = latestPickup(previousMask, latestPickups, order.getPickupDate());
-            long earliestDelivery = earliestDelivery(previousMask, earliestDeliveries, order.getDeliveryDate());
+            long latestPickup = latestPickup(previousMask, latestPickups, orderPickupDays[orderIndex]);
+            long earliestDelivery = earliestDelivery(previousMask, earliestDeliveries, orderDeliveryDays[orderIndex]);
             if (latestPickup > earliestDelivery) {
                 latestPickups[mask] = latestPickup;
                 earliestDeliveries[mask] = earliestDelivery;
                 continue;
             }
 
-            long weight = weights[previousMask] + order.getWeightLbs();
+            long weight = weights[previousMask] + orderWeights[orderIndex];
             if (weight > truck.getMaxWeightLbs()) {
                 weights[mask] = weight;
                 latestPickups[mask] = latestPickup;
@@ -77,7 +96,7 @@ public class LoadOptimizer {
                 continue;
             }
 
-            long volume = volumes[previousMask] + order.getVolumeCuft();
+            long volume = volumes[previousMask] + orderVolumes[orderIndex];
             if (volume > truck.getMaxVolumeCuft()) {
                 weights[mask] = weight;
                 volumes[mask] = volume;
@@ -86,38 +105,56 @@ public class LoadOptimizer {
                 continue;
             }
 
-            long payout = payouts[previousMask] + order.getPayoutCents();
+            long payout = payouts[previousMask] + orderPayouts[orderIndex];
             weights[mask] = weight;
             volumes[mask] = volume;
             payouts[mask] = payout;
             latestPickups[mask] = latestPickup;
             earliestDeliveries[mask] = earliestDelivery;
 
-            Result candidate = new Result(mask, payout, weight, volume, orders);
-            if (isBetter(candidate, best)) {
-                best = candidate;
+            if (isBetter(payout, weight, volume, bestPayout, bestWeight, bestVolume)) {
+                bestMask = mask;
+                bestPayout = payout;
+                bestWeight = weight;
+                bestVolume = volume;
             }
         }
 
-        return best;
+        return new Result(bestMask, bestPayout, bestWeight, bestVolume, orders);
     }
 
-    private long latestPickup(int previousMask, long[] latestPickups, LocalDate pickupDate) {
-        long pickupEpochDay = pickupDate.toEpochDay();
+    private long latestPickup(int previousMask, long[] latestPickups, long pickupEpochDay) {
         return previousMask == 0 ? pickupEpochDay : Math.max(latestPickups[previousMask], pickupEpochDay);
     }
 
-    private long earliestDelivery(int previousMask, long[] earliestDeliveries, LocalDate deliveryDate) {
-        long deliveryEpochDay = deliveryDate.toEpochDay();
+    private long earliestDelivery(int previousMask, long[] earliestDeliveries, long deliveryEpochDay) {
         return previousMask == 0 ? deliveryEpochDay : Math.min(earliestDeliveries[previousMask], deliveryEpochDay);
     }
 
     private boolean isBetter(Result candidate, Result currentBest) {
-        return Comparator
-                .comparingLong(Result::payout)
-                .thenComparingLong(Result::weight)
-                .thenComparingLong(Result::volume)
-                .compare(candidate, currentBest) > 0;
+        return isBetter(
+                candidate.payout(),
+                candidate.weight(),
+                candidate.volume(),
+                currentBest.payout(),
+                currentBest.weight(),
+                currentBest.volume());
+    }
+
+    private boolean isBetter(
+            long candidatePayout,
+            long candidateWeight,
+            long candidateVolume,
+            long currentBestPayout,
+            long currentBestWeight,
+            long currentBestVolume) {
+        if (candidatePayout != currentBestPayout) {
+            return candidatePayout > currentBestPayout;
+        }
+        if (candidateWeight != currentBestWeight) {
+            return candidateWeight > currentBestWeight;
+        }
+        return candidateVolume > currentBestVolume;
     }
 
     private OptimizeResponse emptyResponse(Truck truck) {
