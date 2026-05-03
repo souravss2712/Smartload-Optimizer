@@ -3,8 +3,7 @@
 ## How to run
 
 ```bash
-git clone <your-repo>
-cd <folder>
+git clone git@github.com:souravss2712/Smartload-Optimizer.git
 docker compose up --build
 ```
 
@@ -32,6 +31,19 @@ That means Docker is **not installed** or **not on your PATH**. Do this:
    ```
 
 If Docker is installed but the command still fails, add Docker’s CLI to PATH (typical install location: `C:\Program Files\Docker\Docker\resources\bin`) or reinstall Docker Desktop and enable **“Add shortcut to desktop”** / **Use WSL 2** when the installer offers it.
+
+### Windows: `Docker Desktop is unable to start` / daemon errors
+
+Compose needs the Docker **engine** running. If you see errors like **unable to get image** together with **daemon** or **Docker Desktop is unable to start**:
+
+1. Open **Docker Desktop** from the Start menu and wait several minutes on first boot.
+2. **Restart Docker Desktop**: tray icon → Quit Docker Desktop, then start it again (or reboot Windows).
+3. **WSL 2**: Install/update [WSL](https://learn.microsoft.com/windows/wsl/install) (`wsl --install` or `wsl --update`), then in Docker Desktop → **Settings → General** ensure **Use the WSL 2 based engine** is on and **Resources → WSL integration** enables your default distro.
+4. **Virtualization**: In Task Manager → Performance → CPU, **Virtualization** should be **Enabled**. If not, enable **Intel VT-x / AMD-V** in BIOS/UEFI.
+5. **Hyper-V / hypervisor**: Windows Pro/Enterprise: ensure Hyper-V optional features aren’t half-disabled; Docker docs describe [Windows requirements](https://docs.docker.com/desktop/install/windows-install/).
+6. **Repair**: Docker Desktop → **Troubleshoot** (bug icon) → **Restart** / **Clean / Purge data** (last resort; removes containers/images).
+
+Until Docker runs, start this API locally with **`run-local.cmd`** or **`mvn spring-boot:run`** (JDK 17 + Maven).
 
 ## Health check
 
@@ -76,12 +88,14 @@ Example response:
 
 ## Local development (without Docker)
 
-Requires Java 17 and Maven:
+Requires **JDK 17** and **Maven** on your PATH:
 
 ```bash
 mvn test
 mvn spring-boot:run
 ```
+
+On Windows you can run **`run-local.cmd`** from the project folder (same as `mvn spring-boot:run`).
 
 ## API notes
 
