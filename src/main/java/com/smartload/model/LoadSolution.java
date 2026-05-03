@@ -1,6 +1,5 @@
 package com.smartload.model;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.ArrayList;
 import java.util.List;
@@ -13,10 +12,7 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class OptimizeResponse {
-
-    @JsonProperty("truck_id")
-    private String truckId;
+public class LoadSolution {
 
     @JsonProperty("selected_order_ids")
     @Builder.Default
@@ -37,8 +33,6 @@ public class OptimizeResponse {
     @JsonProperty("utilization_volume_percent")
     private double utilizationVolumePercent;
 
-    @JsonInclude(JsonInclude.Include.NON_EMPTY)
-    @JsonProperty("pareto_optimal_solutions")
-    @Builder.Default
-    private List<LoadSolution> paretoOptimalSolutions = new ArrayList<>();
+    @JsonProperty("utilization_score_percent")
+    private double utilizationScorePercent;
 }

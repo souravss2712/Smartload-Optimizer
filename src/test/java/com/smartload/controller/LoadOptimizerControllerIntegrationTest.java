@@ -33,8 +33,61 @@ class LoadOptimizerControllerIntegrationTest {
                 .contains("\"selected_order_ids\"")
                 .contains("\"total_payout_cents\":430000")
                 .contains("\"utilization_weight_percent\":68.18")
+                .doesNotContain("pareto_optimal_solutions")
                 .doesNotContain("truckId")
                 .doesNotContain("selectedOrderIds");
+    }
+
+    @Test
+    void acceptsBonusPreferencesAndReturnsParetoSolutionsWhenRequested() {
+        String request = """
+                {
+                  "truck": {
+                    "id": "truck-123",
+                    "max_weight_lbs": 20000,
+                    "max_volume_cuft": 2000
+                  },
+                  "orders": [
+                    {
+                      "id": "high-revenue",
+                      "payout_cents": 1000000,
+                      "weight_lbs": 2000,
+                      "volume_cuft": 200,
+                      "origin": "Los Angeles, CA",
+                      "destination": "Dallas, TX",
+                      "pickup_date": "2025-12-05",
+                      "delivery_date": "2025-12-09",
+                      "is_hazmat": false
+                    },
+                    {
+                      "id": "high-utilization",
+                      "payout_cents": 900000,
+                      "weight_lbs": 20000,
+                      "volume_cuft": 2000,
+                      "origin": "Los Angeles, CA",
+                      "destination": "Dallas, TX",
+                      "pickup_date": "2025-12-05",
+                      "delivery_date": "2025-12-09",
+                      "is_hazmat": false
+                    }
+                  ],
+                  "preferences": {
+                    "algorithm": "backtracking",
+                    "include_pareto_optimal_solutions": true,
+                    "revenue_weight": 0.0,
+                    "weight_utilization_weight": 1.0,
+                    "volume_utilization_weight": 1.0
+                  }
+                }
+                """;
+
+        ResponseEntity<String> response = post(request);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody())
+                .contains("\"selected_order_ids\":[\"high-utilization\"]")
+                .contains("\"pareto_optimal_solutions\"")
+                .contains("\"utilization_score_percent\":100.0");
     }
 
     @Test
@@ -87,6 +140,43 @@ class LoadOptimizerControllerIntegrationTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.PAYLOAD_TOO_LARGE);
         assertThat(response.getBody()).contains("orders cannot contain more than 22 items");
+    }
+
+    @Test
+    void returnsBadRequestWhenParetoIsRequestedAboveCap() {
+        String validOrders = IntStream.rangeClosed(1, 21)
+                .mapToObj(index -> """
+                        {
+                          "id": "ord-%03d",
+                          "payout_cents": %d,
+                          "weight_lbs": 1000,
+                          "volume_cuft": 100,
+                          "origin": "Los Angeles, CA",
+                          "destination": "Dallas, TX",
+                          "pickup_date": "2025-12-05",
+                          "delivery_date": "2025-12-09",
+                          "is_hazmat": false
+                        }
+                        """.formatted(index, 10_000 + index))
+                .collect(Collectors.joining(","));
+        String request = """
+                {
+                  "truck": {
+                    "id": "truck-123",
+                    "max_weight_lbs": 44000,
+                    "max_volume_cuft": 3000
+                  },
+                  "orders": [%s],
+                  "preferences": {
+                    "include_pareto_optimal_solutions": true
+                  }
+                }
+                """.formatted(validOrders);
+
+        ResponseEntity<String> response = post(request);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody()).contains("pareto_optimal_solutions supports at most 20 orders");
     }
 
     @Test

@@ -1,8 +1,12 @@
 package com.smartload.optimizer;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertTimeout;
 
+import com.smartload.model.LoadSolution;
+import com.smartload.model.OptimizationAlgorithm;
+import com.smartload.model.OptimizationPreferences;
 import com.smartload.model.OptimizeResponse;
 import com.smartload.model.Order;
 import com.smartload.model.Truck;
@@ -32,6 +36,91 @@ class LoadOptimizerTest {
         assertThat(response.getTotalVolumeCuft()).isEqualTo(2_100);
         assertThat(response.getUtilizationWeightPercent()).isEqualTo(68.18);
         assertThat(response.getUtilizationVolumePercent()).isEqualTo(70.0);
+    }
+
+    @Test
+    void supportsRecursiveBacktrackingWithPruning() {
+        Truck truck = truck(44_000, 3_000);
+        List<Order> orders = List.of(
+                order("ord-001", 250_000, 18_000, 1_200, "Los Angeles, CA", "Dallas, TX", false),
+                order("ord-002", 180_000, 12_000, 900, "Los Angeles, CA", "Dallas, TX", false),
+                order("ord-003", 400_000, 35_000, 2_700, "Los Angeles, CA", "Dallas, TX", false));
+        OptimizationPreferences preferences = OptimizationPreferences.builder()
+                .algorithm(OptimizationAlgorithm.BACKTRACKING)
+                .build();
+
+        OptimizeResponse response = optimizer.optimize(truck, orders, preferences);
+
+        assertThat(response.getSelectedOrderIds()).containsExactly("ord-001", "ord-002");
+        assertThat(response.getTotalPayoutCents()).isEqualTo(430_000);
+    }
+
+    @Test
+    void supportsConfigurableWeightsThatPreferUtilizationOverRevenue() {
+        Truck truck = truck(20_000, 2_000);
+        List<Order> orders = List.of(
+                order("high-revenue", 1_000_000, 2_000, 200, "Los Angeles, CA", "Dallas, TX", false),
+                order("high-utilization", 900_000, 20_000, 2_000, "Los Angeles, CA", "Dallas, TX", false));
+        OptimizationPreferences preferences = OptimizationPreferences.builder()
+                .revenueWeight(0.0)
+                .weightUtilizationWeight(1.0)
+                .volumeUtilizationWeight(1.0)
+                .build();
+
+        OptimizeResponse response = optimizer.optimize(truck, orders, preferences);
+
+        assertThat(response.getSelectedOrderIds()).containsExactly("high-utilization");
+        assertThat(response.getTotalPayoutCents()).isEqualTo(900_000);
+        assertThat(response.getUtilizationWeightPercent()).isEqualTo(100.0);
+        assertThat(response.getUtilizationVolumePercent()).isEqualTo(100.0);
+    }
+
+    @Test
+    void usesRequestWideObjectiveWhenComparingAcrossGroups() {
+        Truck truck = truck(100, 100);
+        List<Order> orders = List.of(
+                order("high-revenue-low-utilization", 1_000, 10, 10, "Los Angeles, CA", "Dallas, TX", false),
+                order("lower-revenue-full-utilization", 900, 100, 100, "San Francisco, CA", "Denver, CO", false));
+        OptimizationPreferences preferences = OptimizationPreferences.builder()
+                .revenueWeight(1.0)
+                .weightUtilizationWeight(0.02)
+                .volumeUtilizationWeight(0.02)
+                .build();
+
+        OptimizeResponse response = optimizer.optimize(truck, orders, preferences);
+
+        assertThat(response.getSelectedOrderIds()).containsExactly("high-revenue-low-utilization");
+        assertThat(response.getTotalPayoutCents()).isEqualTo(1_000);
+    }
+
+    @Test
+    void canReturnParetoOptimalSolutionsForRevenueAndUtilization() {
+        Truck truck = truck(20_000, 2_000);
+        List<Order> orders = List.of(
+                order("high-revenue", 1_000_000, 2_000, 200, "Los Angeles, CA", "Dallas, TX", false),
+                order("high-utilization", 900_000, 20_000, 2_000, "Los Angeles, CA", "Dallas, TX", false));
+        OptimizationPreferences preferences = OptimizationPreferences.builder()
+                .includeParetoOptimalSolutions(true)
+                .build();
+
+        OptimizeResponse response = optimizer.optimize(truck, orders, preferences);
+
+        assertThat(response.getSelectedOrderIds()).containsExactly("high-revenue");
+        assertThat(response.getParetoOptimalSolutions())
+                .extracting(LoadSolution::getSelectedOrderIds)
+                .containsExactly(List.of("high-revenue"), List.of("high-utilization"));
+    }
+
+    @Test
+    void failsFastOnNumericOverflow() {
+        Truck truck = truck(Long.MAX_VALUE, Long.MAX_VALUE);
+        List<Order> orders = List.of(
+                order("ord-001", Long.MAX_VALUE, 1, 1, "Los Angeles, CA", "Dallas, TX", false),
+                order("ord-002", 1, 1, 1, "Los Angeles, CA", "Dallas, TX", false));
+
+        assertThatThrownBy(() -> optimizer.optimize(truck, orders))
+                .isInstanceOf(ArithmeticException.class)
+                .hasMessageContaining("payout_cents");
     }
 
     @Test

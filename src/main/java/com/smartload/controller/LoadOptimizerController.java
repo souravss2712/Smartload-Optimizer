@@ -3,6 +3,7 @@ package com.smartload.controller;
 import com.smartload.model.OptimizeRequest;
 import com.smartload.model.OptimizeResponse;
 import com.smartload.service.LoadOptimizerService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -21,7 +22,7 @@ public class LoadOptimizerController {
             value = "/optimize",
             consumes = MediaType.APPLICATION_JSON_VALUE,
             produces = MediaType.APPLICATION_JSON_VALUE)
-    public OptimizeResponse optimize(@RequestBody OptimizeRequest request) {
+    public OptimizeResponse optimize(@Valid @RequestBody OptimizeRequest request) {
         return loadOptimizerService.optimize(request);
     }
 }

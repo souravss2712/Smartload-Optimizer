@@ -1,6 +1,9 @@
+server:
+  port: 8080
+
 spring:
   application:
-    name: teleport-assessment
+    name: smartload-optimization-api
 
 management:
   endpoints:

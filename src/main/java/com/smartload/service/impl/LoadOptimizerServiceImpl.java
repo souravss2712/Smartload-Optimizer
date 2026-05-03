@@ -18,7 +18,7 @@ import org.springframework.stereotype.Service;
 @Slf4j
 public class LoadOptimizerServiceImpl implements LoadOptimizerService {
 
-    private static final int MAX_ORDERS = 22;
+    private static final int MAX_PARETO_ORDERS = 20;
 
     private final LoadOptimizer loadOptimizer;
     private final Validator validator;
@@ -29,8 +29,9 @@ public class LoadOptimizerServiceImpl implements LoadOptimizerService {
             throw new ConstraintViolationException("request body is required", Set.of());
         }
 
-        if (request.getOrders() != null && request.getOrders().size() > MAX_ORDERS) {
-            throw new TooManyOrdersException("orders cannot contain more than " + MAX_ORDERS + " items");
+        if (request.getOrders() != null && request.getOrders().size() > OptimizeRequest.MAX_ORDERS) {
+            throw new TooManyOrdersException(
+                    "orders cannot contain more than " + OptimizeRequest.MAX_ORDERS + " items");
         }
 
         Set<ConstraintViolation<OptimizeRequest>> violations = validator.validate(request);
@@ -39,8 +40,19 @@ public class LoadOptimizerServiceImpl implements LoadOptimizerService {
         }
 
         int orderCount = request.getOrders().size();
+        if (request.getPreferences() != null
+                && request.getPreferences().includeParetoOptimalSolutionsOrDefault()
+                && orderCount > MAX_PARETO_ORDERS) {
+            throw new ConstraintViolationException(
+                    "pareto_optimal_solutions supports at most " + MAX_PARETO_ORDERS + " orders",
+                    Set.of());
+        }
+
         long startedAt = System.nanoTime();
-        OptimizeResponse response = loadOptimizer.optimize(request.getTruck(), request.getOrders());
+        OptimizeResponse response = loadOptimizer.optimize(
+                request.getTruck(),
+                request.getOrders(),
+                request.getPreferences());
         long elapsedMillis = (System.nanoTime() - startedAt) / 1_000_000;
         log.info("Optimized {} orders for truck {} in {} ms",
                 orderCount, request.getTruck().getId(), elapsedMillis);
