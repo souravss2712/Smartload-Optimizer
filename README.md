@@ -83,19 +83,27 @@ Example response:
 |------|----------|
 | Source code | `src/` |
 | Dockerfile (multi-stage) | `Dockerfile` |
+| Maven Wrapper (optional local builds) | `mvnw.cmd`, `.mvn/wrapper/` |
 | Compose (service only, no database) | `docker-compose.yml` |
 | Sample payload | `sample-request.json` |
 
 ## Local development (without Docker)
 
-Requires **JDK 17** and **Maven** on your PATH:
+Requires **JDK 17**. The repo includes the **Maven Wrapper** (no global `mvn` install needed):
 
 ```bash
-mvn test
-mvn spring-boot:run
+./mvnw test
+./mvnw spring-boot:run
 ```
 
-On Windows you can run **`run-local.cmd`** from the project folder (same as `mvn spring-boot:run`).
+Windows (cmd/PowerShell):
+
+```bat
+mvnw.cmd test
+mvnw.cmd spring-boot:run
+```
+
+If you already have Maven on your PATH, plain `mvn test` / `mvn spring-boot:run` works the same. **`run-local.cmd`** is a shortcut for `mvn spring-boot:run` when `mvn` is installed.
 
 ## API notes
 
